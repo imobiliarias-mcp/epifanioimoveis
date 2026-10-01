@@ -1,56 +1,61 @@
-# Epifânio Imóveis Rental Research MCP
+# Epifânio Imóveis — Central Rental Research MCP Provider
 
-Central rental research module and reverse-engineered API integration for **Epifânio Imóveis** (`epifanioimoveis.com`).
+Reverse-engineered rental search engine and API client for **Epifânio Imóveis** (`https://www.epifanioimoveis.com/`).
 
-## Documentation
-- **API Specification & Reverse Engineering**: [docs/api-research.md](docs/api-research.md)
-- **Research Plan & Findings Report**: [scripts/research-plan.md](scripts/research-plan.md)
+Engineered as a pluggable adapter for the **Central Rental Research MCP (Model Context Protocol)** server following **SOLID**, **Clean Code**, **Object Calisthenics**, and **Design Patterns** in Python, operating as a sister provider to **Casa Linhares**.
 
-## Key Features
-- **Rental & Sales Search Flow**: Full reproduction of rental and sale search with filters (bedrooms, suites, bathrooms, parking spaces, min/max price, area, order).
-- **Canonical Routing & URL Construction**: Implements ImobiBrasil SEO paths and query parameter encoding.
-- **Pagination**: 15 listings per page with robust termination detection.
-- **Property Details & Microdata**: Extraction of structured metadata from `Schema.org` JSON-LD (`RentAction`, `BuyAction`, `Product`) and HTML elements.
-- **Photo Gallery AJAX Extraction**: Direct high-resolution image retrieval via `/t27/lista_imoveis_fotos.php`.
-- **Location Catalog Discovery**: Dynamic extraction of portal municipalities and neighborhood identifiers.
-- **Design Principles**: Strict adherence to SOLID, Clean Code, and Object Calisthenics (0 `else` keywords, <= 2 instance variables per class, functions <= 15 lines, classes <= 100 lines, modules < 200 lines).
+---
 
-## Quick Start
+## 📚 Documentation
 
-### Installation
-```bash
-uv venv .venv
-source .venv/bin/activate
-uv pip install -e ".[dev]"
-```
+- **[Documentation Index](file:///home/samuelcaldas/repos/imobiliarias/epifanioimoveis/docs/README.md)** (`docs/README.md`): Overview of all project documentation.
+- **[Single Source of Truth (SOT) API Spec](file:///home/samuelcaldas/repos/imobiliarias/epifanioimoveis/docs/sot/epifanio_imobibrasil_api_spec.md)** (`docs/sot/epifanio_imobibrasil_api_spec.md`): Complete endpoint contracts, payload schemas, query parameters, and ImobiBrasil SaaS platform architecture.
+- **[ADR 0001: MCP Architecture & Design](file:///home/samuelcaldas/repos/imobiliarias/epifanioimoveis/docs/adr/0001-rental-search-mcp-module-design.md)** (`docs/adr/0001-rental-search-mcp-module-design.md`): Hexagonal architecture, Object Calisthenics enforcement, and design patterns.
+- **[API Reference](file:///home/samuelcaldas/repos/imobiliarias/epifanioimoveis/docs/api_reference.md)** (`docs/api_reference.md`): Ready-to-use cURL recipes and parameter matrices.
+- **[Reverse Engineering Analysis](file:///home/samuelcaldas/repos/imobiliarias/epifanioimoveis/docs/api-research.md)** (`docs/api-research.md`): Initial reverse-engineering investigation notes and DOM selectors.
+- **[Scripts & MCP Module Guide](file:///home/samuelcaldas/repos/imobiliarias/epifanioimoveis/scripts/README.md)** (`scripts/README.md`): Package layout and CLI runner guide.
+- **[Architecture Standards](file:///home/samuelcaldas/repos/imobiliarias/epifanioimoveis/scripts/ARCHITECTURE.md)** (`scripts/ARCHITECTURE.md`): Calisthenics and SOLID compliance breakdown.
+- **[Usage & MCP Integration](file:///home/samuelcaldas/repos/imobiliarias/epifanioimoveis/scripts/USAGE.md)** (`scripts/USAGE.md`): How to use the Python modules and integrate into MCP servers.
+- **[Research Plan & Findings Report](file:///home/samuelcaldas/repos/imobiliarias/epifanioimoveis/scripts/research-plan.md)** (`scripts/research-plan.md`): Reverse-engineering methodology and probing execution log.
 
-### Run Verification Script
-```bash
-python scripts/verify_research.py
-```
+---
+
+## ⚡ Quickstart
 
 ### Run Automated Tests
 ```bash
-pytest
+python3 scripts/run_tests.py
 ```
 
-## Python API Example
-
-```python
-from epifanio_research import EpifanioRentalClient, SearchCriteria, PropertyType
-
-client = EpifanioRentalClient()
-
+### Search Rentals
+```bash
 # Search rentals in Timóteo
-rentals = client.search_rentals(city="timoteo")
-for item in rentals:
-    print(item.identity.property_id, item.title, item.price_text)
+python3 scripts/run_search.py --city Timóteo --max-price 2500
 
-# Retrieve property details
-detail = client.get_details("4198561")
-print(detail.overview.title, detail.pricing.amount, detail.location.neighborhood)
-
-# Retrieve photo gallery
-photos = client.get_photos("4198561")
-print(f"Loaded {len(photos)} photos. First: {photos.first_photo()}")
+# Search rentals with minimum 2 bedrooms
+python3 scripts/run_search.py --city Timóteo --bedrooms 2
 ```
+
+### View Listing Details
+```bash
+# View complete details for property code 4198561
+python3 scripts/run_property_detail.py 4198561
+```
+
+### Inspect Available Localities & Facets
+```bash
+python3 scripts/run_facets.py
+```
+
+---
+
+## 🏛️ Code Architecture & Standards Compliance
+
+- **No `else` Keyword**: 100% eliminated using guard clauses, early returns, and polymorphic handlers.
+- **Single Level of Indentation**: All methods adhere to at most 1 indent level.
+- **Wrapped Primitives**: Domain concepts (`ListingPrice`, `PropertyCode`, `GeoCoordinate`, `RentalFilter`) are immutable Value Objects.
+- **First-Class Collections**: `RentalListingCollection` and `FacetCollection` wrap items without leaking raw mutable collections.
+- **Size Limits**: Functions ≤ 15 lines, Classes ≤ 100 lines, Modules < 200 lines.
+- **Instance Variables**: All classes hold at most 2 instance variables.
+- **One Dot per Line**: Method chaining is eliminated in favor of explicit intermediate assignments.
+- **Zero Abbreviations**: Clear, descriptive domain naming across all modules.
