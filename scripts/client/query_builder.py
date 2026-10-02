@@ -1,6 +1,7 @@
 """Query builder translating RentalFilter to canonical portal routes and parameters."""
 
 from urllib.parse import urlencode
+
 from scripts.client.configuration import EpifanioConfiguration
 from scripts.domain.criteria import RentalFilter
 
@@ -11,6 +12,11 @@ class RentalQueryBuilder:
     def __init__(self, configuration: EpifanioConfiguration | None = None) -> None:
         """Initialize query builder with portal configuration."""
         self._config = configuration or EpifanioConfiguration()
+
+    def public_base_url(self) -> str:
+        """Return the configured public-page origin, not a search endpoint."""
+        configuration = self._config
+        return configuration.public_site_base_url()
 
     def build_search_url(self, search_filter: RentalFilter) -> str:
         """Construct canonical search URL with path components and query string."""

@@ -19,6 +19,11 @@ print(f"Total found: {search_result.total_count()}")
 
 for listing in search_result.listings():
     print(listing.format_summary())
+    print("Link:", listing.url)
+
+# Serialized search output includes each absolute url and original url_path.
+serialized = search_result.to_dictionary()
+print(serialized["listings"][0]["url"])
 ```
 
 ### 1.2 Filtered Search

@@ -37,6 +37,7 @@ This repository contains the reverse-engineered API specifications, architectura
 | **Multi-Neighborhood Filter** | `?&bairros={id1},{id2}` (logical OR) |
 | **Pagination Model** | 15 listings per page via `&pag={N}` |
 | **Property Detail Endpoint** | Direct ID `/imovel/{id}` and canonical `/imovel/{id}/{slug}` |
+| **Search Result Link** | Serialized listing `url` is absolute; original `url_path` and identifying queries are retained |
 | **Microdata Extraction** | `Schema.org` JSON-LD (`Product`, `RentAction`, `BuyAction`) |
 | **Photo Gallery AJAX** | `GET /t27/lista_imoveis_fotos.php?imovel={id}` returning JSON array |
 | **Authentication Requirement** | **None** (Public search and detail views; desktop User-Agent required) |

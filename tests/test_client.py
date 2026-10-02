@@ -91,3 +91,64 @@ def test_http_client_raises_connection_error_for_failed_response(
 
     with pytest.raises(PortalConnectionError, match=str(status_code)):
         HttpxHttpClient().get("https://www.epifanioimoveis.com/search")
+
+
+def test_client_public_base_override_reaches_core_search_parser():
+    """Keep search transport and public listing URL bases independent."""
+    class RecordingHttpClient:
+        def __init__(self):
+            self.requested_urls = []
+
+        def get(self, url):
+            self.requested_urls.append(url)
+            return HttpResponse(200, SEARCH_HTML_FIXTURE, url)
+
+    http_client = RecordingHttpClient()
+    gateway = RentalNetworkGateway(
+        http_client=http_client,
+        url_builder=UrlBuilder(base_url="https://search.example"),
+    )
+    client = EpifanioRentalClient(gateway=gateway, public_base_url="https://public.example")
+    results = client.search_rentals(city="timoteo")
+
+    assert len(http_client.requested_urls) == 1
+    assert http_client.requested_urls[0].startswith("https://search.example/")
+    assert results[0].url == (
+        "https://public.example/imovel/4198561/"
+        "apartamento-locacao-timoteo-mg-timirim"
+    )
+
+
+def test_script_provider_public_base_override_reaches_parser():
+    """Use configured public links independently from the search host."""
+    from scripts.client.configuration import EpifanioConfiguration
+    from scripts.client.query_builder import RentalQueryBuilder
+    from scripts.domain.criteria import RentalFilter
+    from scripts.providers.epifanio import EpifanioRentalProvider
+
+    class RecordingTransport:
+        def __init__(self):
+            self.requested_urls = []
+
+        def get_text(self, url):
+            self.requested_urls.append(url)
+            return SEARCH_HTML_FIXTURE
+
+    transport = RecordingTransport()
+    configuration = EpifanioConfiguration(
+        base_hostname="public.example",
+        base_url="https://search.example",
+    )
+    provider = EpifanioRentalProvider(
+        transport=transport,
+        query_builder=RentalQueryBuilder(configuration),
+    )
+    result = provider.search_rentals(RentalFilter())
+    listing = result.to_dictionary()["listings"][0]
+
+    assert len(transport.requested_urls) == 1
+    assert transport.requested_urls[0].startswith("https://search.example/")
+    assert listing["url"] == (
+        "https://public.example/imovel/4198561/"
+        "apartamento-locacao-timoteo-mg-timirim"
+    )

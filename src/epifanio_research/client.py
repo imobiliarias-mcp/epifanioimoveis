@@ -15,10 +15,11 @@ class EpifanioRentalClient:
         self,
         gateway: RentalNetworkGateway | None = None,
         parsers: RentalParserSuite | None = None,
+        public_base_url: str | None = None,
     ) -> None:
         """Initialize client with gateway and parser suite collaborators."""
         self._gateway = gateway or RentalNetworkGateway()
-        self._parsers = parsers or RentalParserSuite()
+        self._parsers = parsers or RentalParserSuite(public_base_url=public_base_url)
 
     def search(self, criteria: SearchCriteria) -> ListingCollection:
         """Execute search query and return parsed collection of listings."""

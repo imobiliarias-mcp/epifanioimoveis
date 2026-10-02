@@ -17,3 +17,7 @@ class EpifanioConfiguration:
     def referer_header_value(self) -> str:
         """Return canonical portal referer."""
         return f"https://{self.base_hostname}/"
+
+    def public_site_base_url(self) -> str:
+        """Return the configured public listing-site origin."""
+        return f"https://{self.base_hostname}"

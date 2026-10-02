@@ -3,122 +3,43 @@
 import ast
 import json
 import re
-from bs4 import BeautifulSoup, Tag
-from scripts.domain.collections import (
-    FacetCollection,
-    RentalListingCollection,
-    RentalSearchResult,
+
+from bs4 import BeautifulSoup
+
+from scripts.client.search_parser import (
+    DEFAULT_PUBLIC_BASE_URL,
+    SearchResultParser,  # noqa: F401 - public compatibility re-export
+    resolve_public_property_link,
 )
+from scripts.domain.collections import FacetCollection
 from scripts.domain.entities import (
     DetailedProfile,
     ListingCore,
     ListingDetails,
     ListingIdentity,
+    ListingMedia,
+    ListingPublicLink,
     ListingValuation,
     RentalListing,
     RentalPropertyDetail,
 )
+from scripts.domain.exceptions import InvalidPublicPropertyUrlException
 from scripts.domain.value_objects import ListingPrice, PropertyCode
-
-
-class SearchResultParser:
-    """Parses search results HTML into RentalSearchResult."""
-
-    def parse_search_response(self, html_text: str) -> RentalSearchResult:
-        """Extract rental listings and total count from search markup."""
-        soup = BeautifulSoup(html_text, "html.parser")
-        cards = soup.select(".imovelcard")
-        parsed_items: list[RentalListing] = []
-        for card in cards:
-            if not card.get("data-link"):
-                continue
-            listing = self._parse_single_card(card)
-            parsed_items.append(listing)
-        collection = RentalListingCollection(listings=tuple(parsed_items))
-        total_count = self._extract_total_count(soup, len(parsed_items))
-        return RentalSearchResult(collection=collection, total_listings_count=total_count)
-
-    def _parse_single_card(self, card: Tag) -> RentalListing:
-        """Convert a single .imovelcard tag into RentalListing entity."""
-        link = card.get("data-link", "")
-        code_str = self._extract_code_from_link(link)
-        title = self._extract_card_title(card)
-        prop_type = self._extract_property_type(card)
-        price_val = self._extract_card_price(card)
-        location = self._extract_card_location(card)
-        media_url = self._extract_card_thumbnail(card)
-
-        identity = ListingIdentity(code=PropertyCode(code_str), title=title)
-        valuation = ListingValuation(rental_price=ListingPrice(price_val), property_type=prop_type)
-        core = ListingCore(identity=identity, valuation=valuation)
-        details = ListingDetails(location_summary=location, media_url=media_url)
-        return RentalListing(core=core, details=details)
-
-    def _extract_code_from_link(self, link: str) -> str:
-        """Extract numeric identifier from URL path."""
-        parts = [p for p in link.strip("/").split("/") if p]
-        if len(parts) >= 2:
-            return parts[1]
-        return "0"
-
-    def _extract_card_title(self, card: Tag) -> str:
-        """Extract headline title from card."""
-        img_node = card.select_one(".imovelcard__img")
-        if img_node and img_node.get("title"):
-            return img_node["title"].strip()
-        loc_node = card.select_one(".imovelcard__info__local")
-        if loc_node:
-            return loc_node.get_text(strip=True)
-        return "Imóvel para Locação"
-
-    def _extract_property_type(self, card: Tag) -> str:
-        """Extract property type text from card reference."""
-        ref_node = card.select_one(".imovelcard__info__ref")
-        text = ref_node.get_text(strip=True) if ref_node else ""
-        if "-" in text:
-            return text.split("-")[-1].strip()
-        return "Imóvel"
-
-    def _extract_card_price(self, card: Tag) -> float:
-        """Parse numeric price from card value node."""
-        node = card.select_one(".imovelcard__valor__valor")
-        text = node.get_text(" ", strip=True) if node else ""
-        clean = re.sub(r"[^\d]", "", text)
-        if not clean:
-            return 0.0
-        return float(clean)
-
-    def _extract_card_location(self, card: Tag) -> str:
-        """Parse neighborhood and municipality from card."""
-        node = card.select_one(".imovelcard__info__local")
-        if not node:
-            return ""
-        return node.get_text(strip=True)
-
-    def _extract_card_thumbnail(self, card: Tag) -> str:
-        """Extract thumbnail image URL from card."""
-        img = card.select_one(".imovelcard__img img")
-        if not img or not img.get("src"):
-            return ""
-        return img["src"]
-
-    def _extract_total_count(self, soup: BeautifulSoup, page_count: int) -> int:
-        """Infer total matching listing count."""
-        text = soup.get_text(" ", strip=True)
-        match = re.search(r"(\d+)\s+im[óo]veis\s+encontrados", text, re.IGNORECASE)
-        if match:
-            return int(match.group(1))
-        return page_count
 
 
 class PropertyDetailParser:
     """Parses property detail HTML and microdata into RentalPropertyDetail."""
+
+    def __init__(self, public_base_url: str = DEFAULT_PUBLIC_BASE_URL) -> None:
+        """Configure a public-page base for the documented detail route."""
+        self._public_base_url = public_base_url
 
     def parse_detail_response(self, html_text: str) -> RentalPropertyDetail:
         """Parse property detail markup and return domain entity."""
         soup = BeautifulSoup(html_text, "html.parser")
         ld_data = self._extract_json_ld(soup)
         code_str = self._extract_code(soup, ld_data)
+        public_link = self._detail_public_link(code_str)
         title = self._extract_title(soup)
         price_val = self._extract_price(soup, ld_data)
         prop_type = self._extract_property_type(title)
@@ -130,10 +51,20 @@ class PropertyDetailParser:
         identity = ListingIdentity(code=PropertyCode(code_str), title=title)
         valuation = ListingValuation(rental_price=ListingPrice(price_val), property_type=prop_type)
         core = ListingCore(identity=identity, valuation=valuation)
-        details = ListingDetails(location_summary=location, media_url=media_url)
+        media = ListingMedia(media_url=media_url, public_link=public_link)
+        details = ListingDetails(location_summary=location, media=media)
         listing = RentalListing(core=core, details=details)
         profile = DetailedProfile(description=description, amenities_summary=amenities)
         return RentalPropertyDetail(listing=listing, profile=profile)
+
+    def _detail_public_link(self, property_code: str) -> ListingPublicLink:
+        """Build the already-supported direct detail route from its code."""
+        if not property_code.isdigit():
+            raise InvalidPublicPropertyUrlException(
+                f"Property '{property_code}' has no recoverable public URL."
+            )
+        url_path = f"/imovel/{property_code}"
+        return resolve_public_property_link(url_path, self._public_base_url, property_code)
 
     def _extract_json_ld(self, soup: BeautifulSoup) -> dict[str, any]:
         """Aggregate JSON-LD scripts by @type."""

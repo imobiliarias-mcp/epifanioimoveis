@@ -1,6 +1,7 @@
 """Epifânio Imóveis rental search provider implementation."""
 
 import httpx
+
 from scripts.client.configuration import EpifanioConfiguration
 from scripts.client.http_transport import EpifanioHttpTransport
 from scripts.client.parsers import (
@@ -46,7 +47,7 @@ class EpifanioRentalProvider(RentalProviderProtocol):
         """Search rental listings using criteria."""
         search_url = self._builder.build_search_url(search_filter)
         html_content = self._transport.get_text(search_url)
-        parser = SearchResultParser()
+        parser = SearchResultParser(public_base_url=self._builder.public_base_url())
         return parser.parse_search_response(html_content)
 
     def get_property_detail(self, code: PropertyCode) -> RentalPropertyDetail:
@@ -57,7 +58,7 @@ class EpifanioRentalProvider(RentalProviderProtocol):
         final_url = str(resp.url).rstrip("/")
         if final_url.endswith("epifanioimoveis.com"):
             raise PropertyNotFoundException(f"Property '{code_str}' was not found.")
-        parser = PropertyDetailParser()
+        parser = PropertyDetailParser(public_base_url=self._builder.public_base_url())
         return parser.parse_detail_response(resp.text)
 
     def get_facets(self) -> FacetCollection:

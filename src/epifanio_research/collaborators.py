@@ -52,9 +52,15 @@ class RentalNetworkGateway:
 class ListingParserBundle:
     """Aggregates search and metadata parsers."""
 
-    def __init__(self, search_parser: SearchPageParser | None = None) -> None:
+    def __init__(
+        self,
+        search_parser: SearchPageParser | None = None,
+        public_base_url: str | None = None,
+    ) -> None:
         """Initialize search and metadata parsers."""
-        self._search = search_parser or SearchPageParser()
+        self._search = search_parser or SearchPageParser(
+            public_base_url=public_base_url or "https://www.epifanioimoveis.com"
+        )
         self._metadata = MetadataParser()
 
     @property
@@ -94,9 +100,10 @@ class RentalParserSuite:
         self,
         listing_bundle: ListingParserBundle | None = None,
         detail_bundle: DetailParserBundle | None = None,
+        public_base_url: str | None = None,
     ) -> None:
         """Initialize suite with listing and detail bundles."""
-        self._listing = listing_bundle or ListingParserBundle()
+        self._listing = listing_bundle or ListingParserBundle(public_base_url=public_base_url)
         self._detail = detail_bundle or DetailParserBundle()
 
     @property

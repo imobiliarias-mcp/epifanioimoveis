@@ -105,8 +105,9 @@ Search result cards are rendered with the class `.imovelcard` and carry structur
 ### 5.2 Field Extraction Matrix
 | Domain Field | DOM Selector / Expression | Example Extracted Value |
 | :--- | :--- | :--- |
-| `property_id` | `card.get('data-link').split('/')[2]` | `4198561` |
-| `url_path` | `card.get('data-link')` | `/imovel/4198561/apartamento-locacao-timoteo-mg-timirim` |
+| `property_id` | Numeric segment from the card's property route | `4198561` |
+| `url_path` | Original `data-link`, or the real detail anchor `href` when absent | `/imovel/4198561/apartamento-locacao-timoteo-mg-timirim` |
+| `url` | `url_path` resolved against the configured public site origin | `https://www.epifanioimoveis.com/imovel/4198561/apartamento-locacao-timoteo-mg-timirim` |
 | `title` | `card.select_one('.imovelcard__img')['title']` | `Apartamento para Locação, Timóteo / MG...` |
 | `thumbnail_url` | `card.select_one('.imovelcard__img img')['src']` | `https://imgs2.cdn-imobibrasil.com.br/...` |
 | `neighborhood` | `.imovelcard__info__local` text before `,` | `Timirim` |
@@ -119,6 +120,10 @@ Search result cards are rendered with the class `.imovelcard` and carry structur
 | `bathrooms` | `.imovelcard__info__feature i.fa-shower` sibling text | `2` |
 | `parking_spaces` | `.imovelcard__info__feature i.fa-car` sibling text | `2` |
 | `area_text` | `.imovelcard__info__feature i.fa-arrows-h` sibling text | `300 m² Terreno` |
+
+### 5.3 Public Property URL Output
+
+Core listing and collection serializers expose an absolute `url` while retaining the card's original `url_path`. Relative and protocol-relative links resolve against the configurable `public_base_url` (default: `https://www.epifanioimoveis.com`); identifying query parameters such as `?id=608` are preserved. If `data-link` is missing, the parser may use the card's actual detail-anchor `href`; it does not invent a route or issue extra detail requests. Invalid schemes, other hosts, image/search URLs, the site root, and links without a recoverable property route raise a local URL-validation exception. Existing search CLI and MCP results include the same `url`.
 
 ---
 

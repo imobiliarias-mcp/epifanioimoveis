@@ -1,11 +1,9 @@
 """Unit tests for HTML, JSON-LD, and AJAX photo parsers."""
 
 from epifanio_research.parsers.detail_parser import PropertyDetailParser
-from epifanio_research.parsers.feature_extractor import CardFeatureExtractor
 from epifanio_research.parsers.metadata_parser import MetadataParser
 from epifanio_research.parsers.photo_parser import PhotoGalleryParser
 from epifanio_research.parsers.search_parser import SearchPageParser
-
 
 SEARCH_HTML_FIXTURE = """
 <html>
@@ -145,3 +143,302 @@ def test_metadata_parser():
     nb = city.neighborhoods.find_by_name("Timirim")
     assert nb is not None
     assert nb.numeric_id == "479695"
+
+
+def test_search_page_parser_exposes_absolute_public_url():
+    """Resolve the listing path without discarding an identifying query."""
+    path = "/imovel/4198561/apartamento-locacao-timoteo-mg-timirim?id=608"
+    html = SEARCH_HTML_FIXTURE.replace(
+        'data-link="/imovel/4198561/apartamento-locacao-timoteo-mg-timirim"',
+        f'data-link="{path}"',
+    )
+    listing = SearchPageParser().parse(html)[0]
+
+    assert listing.identity.url_path == path
+    assert getattr(listing, "url", None) == f"https://www.epifanioimoveis.com{path}"
+
+
+def test_listing_collection_serializes_public_url_and_pagination():
+    """Serialize property URLs alongside typed collection metadata."""
+    collection = SearchPageParser().parse(SEARCH_HTML_FIXTURE, page_number=3)
+    serialized = collection.to_dictionary()
+
+    assert serialized["items"][0]["url"] == (
+        "https://www.epifanioimoveis.com/imovel/4198561/"
+        "apartamento-locacao-timoteo-mg-timirim"
+    )
+    assert serialized["items"][0]["url_path"].startswith("/imovel/4198561/")
+    assert serialized["current_page"] == 3
+    assert serialized["has_next_page"] is True
+
+
+def test_search_parser_rejects_non_public_property_links():
+    """Reject schemes, image/search destinations, and site roots."""
+    import pytest
+
+    invalid_links = (
+        "javascript:alert(1)",
+        "https://evil.example/imovel/4198561/apartamento",
+        "https://www.epifanioimoveis.com/imagens/4198561.jpg",
+        "https://www.epifanioimoveis.com/imovel/locacao/todos/timoteo",
+        "https://www.epifanioimoveis.com/",
+    )
+    for invalid_link in invalid_links:
+        invalid_html = SEARCH_HTML_FIXTURE.replace(
+            'data-link="/imovel/4198561/apartamento-locacao-timoteo-mg-timirim"',
+            f'data-link="{invalid_link}"',
+        ).replace('href="/imovel/4198561"', f'href="{invalid_link}"')
+        with pytest.raises(ValueError, match="invalid public URL"):
+            SearchPageParser().parse(invalid_html)
+
+
+def test_scripts_search_serializes_public_url_and_preserves_path():
+    """Expose the public listing URL in the script result serializer."""
+    from scripts.client.parsers import SearchResultParser
+
+    result = SearchResultParser().parse_search_response(SEARCH_HTML_FIXTURE)
+    listing = result.to_dictionary()["listings"][0]
+
+    assert listing["url"] == (
+        "https://www.epifanioimoveis.com/imovel/4198561/"
+        "apartamento-locacao-timoteo-mg-timirim"
+    )
+    assert listing["url_path"] == (
+        "/imovel/4198561/apartamento-locacao-timoteo-mg-timirim"
+    )
+
+
+def test_scripts_search_rejects_non_public_property_links():
+    """Reject schemes, image/search destinations, and site roots."""
+    import pytest
+
+    from scripts.client.parsers import SearchResultParser
+
+    invalid_links = (
+        "javascript:alert(1)",
+        "https://evil.example/imovel/4198561/apartamento",
+        "https://www.epifanioimoveis.com/imagens/4198561.jpg",
+        "https://www.epifanioimoveis.com/imovel/locacao/todos/timoteo",
+        "https://www.epifanioimoveis.com/",
+    )
+    for invalid_link in invalid_links:
+        invalid_html = SEARCH_HTML_FIXTURE.replace(
+            'data-link="/imovel/4198561/apartamento-locacao-timoteo-mg-timirim"',
+            f'data-link="{invalid_link}"',
+        ).replace('href="/imovel/4198561"', f'href="{invalid_link}"')
+        with pytest.raises(ValueError, match="invalid public URL"):
+            SearchResultParser().parse_search_response(invalid_html)
+
+
+def test_search_cli_displays_public_property_url(capsys):
+    """Show each public listing link in the existing search CLI."""
+    from scripts.client.parsers import SearchResultParser
+    from scripts.run_search import display_results
+
+    result = SearchResultParser().parse_search_response(SEARCH_HTML_FIXTURE)
+    display_results(result)
+
+    assert "Link: https://www.epifanioimoveis.com/imovel/4198561/" in capsys.readouterr().out
+
+
+def test_mcp_search_exposes_public_property_url():
+    """Preserve the listing URL in the existing MCP search response."""
+    from scripts.client.parsers import SearchResultParser
+    from scripts.mcp.tools import EpifanioMcpAdapter
+
+    result = SearchResultParser().parse_search_response(SEARCH_HTML_FIXTURE)
+
+    class StubProvider:
+        def search_rentals(self, search_filter):
+            return result
+
+    response = EpifanioMcpAdapter(StubProvider()).search_rentals()
+
+    assert response["listings"][0]["url"] == (
+        "https://www.epifanioimoveis.com/imovel/4198561/"
+        "apartamento-locacao-timoteo-mg-timirim"
+    )
+
+
+def test_search_parser_normalizes_absolute_and_protocol_relative_links():
+    """Keep identifying queries for absolute and protocol-relative card links."""
+    path = "/imovel/4198561/apartamento-locacao-timoteo-mg-timirim?id=608"
+    relative_path = path.split("?", maxsplit=1)[0]
+    for source in (
+        f"https://www.epifanioimoveis.com{path}",
+        f"//www.epifanioimoveis.com{path}",
+    ):
+        html = SEARCH_HTML_FIXTURE.replace(
+            f'data-link="{relative_path}"', f'data-link="{source}"'
+        )
+        listing = SearchPageParser().parse(html)[0]
+        assert listing.identity.url_path == source
+        expected_url = source
+        if source.startswith("//"):
+            expected_url = f"https://www.epifanioimoveis.com{path}"
+        assert listing.url == expected_url
+
+
+def test_search_parser_uses_real_anchor_fallback_and_rejects_missing_urls():
+    """Use a real card anchor when its canonical data-link is absent."""
+    import pytest
+
+    from epifanio_research.domain.listing import InvalidPublicPropertyUrlError
+
+    html = SEARCH_HTML_FIXTURE.replace(
+        ' data-link="/imovel/4198561/apartamento-locacao-timoteo-mg-timirim"', ""
+    )
+    listing = SearchPageParser().parse(html)[0]
+    assert listing.identity.url_path == "/imovel/4198561"
+    assert listing.url == "https://www.epifanioimoveis.com/imovel/4198561"
+    unrecoverable = html.replace('href="/imovel/4198561"', "")
+    with pytest.raises(InvalidPublicPropertyUrlError, match="recoverable"):
+        SearchPageParser().parse(unrecoverable)
+
+
+def test_search_collection_serializes_zero_and_multiple_results():
+    """Retain collection type, counts, and pagination for empty and many results."""
+    empty = SearchPageParser().parse("<html></html>", page_number=2).to_dictionary()
+    second_card = (
+        '<div class="imovelcard" data-link="/imovel/4198562/apartamento">'
+        '<div class="imovelcard__info"><h2 class="imovelcard__info__local">Centro, Timóteo / MG</h2></div>'
+        "</div>"
+    )
+    two_results_html = SEARCH_HTML_FIXTURE.replace("</body>", f"{second_card}</body>")
+    multiple = SearchPageParser().parse(two_results_html, page_number=2).to_dictionary()
+
+    assert empty == {"items": [], "current_page": 2, "has_next_page": False}
+    assert len(multiple["items"]) == 2
+    assert multiple["current_page"] == 2
+    assert multiple["has_next_page"] is True
+
+
+def test_scripts_search_preserves_absolute_and_protocol_relative_links():
+    """Keep native paths and query parameters when resolving script results."""
+    from scripts.client.parsers import SearchResultParser
+
+    path = "/imovel/4198561/apartamento-locacao-timoteo-mg-timirim?id=608"
+    source_path = path.split("?", maxsplit=1)[0]
+    for source in (
+        f"https://www.epifanioimoveis.com{path}",
+        f"//www.epifanioimoveis.com{path}",
+    ):
+        html = SEARCH_HTML_FIXTURE.replace(
+            f'data-link="{source_path}"', f'data-link="{source}"'
+        )
+        listing = SearchResultParser().parse_search_response(html).to_dictionary()["listings"][0]
+        expected = source if source.startswith("https:") else f"https://www.epifanioimoveis.com{path}"
+        assert listing["url_path"] == source
+        assert listing["url"] == expected
+
+
+def test_scripts_search_uses_anchor_fallback_and_rejects_missing_urls():
+    """Use a real card anchor and reject a card with no recoverable URL."""
+    import pytest
+
+    from scripts.client.parsers import SearchResultParser
+    from scripts.domain.exceptions import InvalidPublicPropertyUrlException
+
+    html = SEARCH_HTML_FIXTURE.replace(
+        ' data-link="/imovel/4198561/apartamento-locacao-timoteo-mg-timirim"', ""
+    )
+    listing = SearchResultParser().parse_search_response(html).to_dictionary()["listings"][0]
+    assert listing["url_path"] == "/imovel/4198561"
+    assert listing["url"] == "https://www.epifanioimoveis.com/imovel/4198561"
+    unrecoverable = html.replace('href="/imovel/4198561"', "")
+    with pytest.raises(InvalidPublicPropertyUrlException, match="recoverable"):
+        SearchResultParser().parse_search_response(unrecoverable)
+
+
+def test_scripts_search_serializes_zero_and_multiple_results():
+    """Preserve script result counts for empty and multi-property responses."""
+    from scripts.client.parsers import SearchResultParser
+
+    empty = SearchResultParser().parse_search_response("<html></html>").to_dictionary()
+    second_card = (
+        '<div class="imovelcard" data-link="/imovel/4198562/apartamento">'
+        '<div class="imovelcard__info"><h2 class="imovelcard__info__local">Centro, Timóteo / MG</h2></div>'
+        "</div>"
+    )
+    multi_html = SEARCH_HTML_FIXTURE.replace("</body>", f"{second_card}</body>")
+    multiple = SearchResultParser().parse_search_response(multi_html).to_dictionary()
+
+    assert empty["returned_count"] == 0
+    assert len(multiple["listings"]) == 2
+    assert multiple["returned_count"] == 2
+
+
+def test_core_listing_serializer_rejects_missing_and_relative_public_urls():
+    """Reject manually constructed listings that cannot serialize a public URL."""
+    from dataclasses import replace
+
+    import pytest
+
+    from epifanio_research.domain.listing import InvalidPublicPropertyUrlError
+
+    listing = SearchPageParser().parse(SEARCH_HTML_FIXTURE)[0]
+    for url in ("", "/imovel/4198561"):
+        with pytest.raises(InvalidPublicPropertyUrlError, match="4198561"):
+            replace(listing, url=url).to_dictionary()
+
+
+def test_adapter_listing_serializer_rejects_missing_and_relative_public_urls():
+    """Reject manually constructed adapter listings with unusable public URLs."""
+    from dataclasses import replace
+
+    import pytest
+
+    from scripts.client.parsers import SearchResultParser
+    from scripts.domain.exceptions import InvalidPublicPropertyUrlException
+
+    listing = SearchResultParser().parse_search_response(SEARCH_HTML_FIXTURE).listings().listings[0]
+    for url in ("", "/imovel/4198561"):
+        public_link = replace(listing.details.media.public_link, url=url)
+        media = replace(listing.details.media, public_link=public_link)
+        details = replace(listing.details, media=media)
+        invalid_listing = replace(listing, details=details)
+        with pytest.raises(InvalidPublicPropertyUrlException, match="4198561"):
+            invalid_listing.to_dictionary()
+
+
+def test_malformed_card_links_raise_the_local_public_url_exception():
+    """Wrap malformed canonical links and detail anchors with URL context."""
+    import pytest
+
+    from epifanio_research.domain.listing import InvalidPublicPropertyUrlError
+
+    malformed_link = "https://[broken/imovel/4198561"
+    canonical_html = SEARCH_HTML_FIXTURE.replace(
+        'data-link="/imovel/4198561/apartamento-locacao-timoteo-mg-timirim"',
+        f'data-link="{malformed_link}"',
+    )
+    anchor_html = SEARCH_HTML_FIXTURE.replace(
+        ' data-link="/imovel/4198561/apartamento-locacao-timoteo-mg-timirim"', ""
+    ).replace('href="/imovel/4198561"', f'href="{malformed_link}"')
+
+    for invalid_html in (canonical_html, anchor_html):
+        with pytest.raises(InvalidPublicPropertyUrlError, match="malformed public URL") as error:
+            SearchPageParser().parse(invalid_html)
+        assert malformed_link in str(error.value)
+
+
+def test_adapter_malformed_card_links_raise_the_local_exception():
+    """Wrap malformed adapter links and detail anchors with URL context."""
+    import pytest
+
+    from scripts.client.parsers import SearchResultParser
+    from scripts.domain.exceptions import InvalidPublicPropertyUrlException
+
+    malformed_link = "https://[broken/imovel/4198561"
+    canonical_html = SEARCH_HTML_FIXTURE.replace(
+        'data-link="/imovel/4198561/apartamento-locacao-timoteo-mg-timirim"',
+        f'data-link="{malformed_link}"',
+    )
+    anchor_html = SEARCH_HTML_FIXTURE.replace(
+        ' data-link="/imovel/4198561/apartamento-locacao-timoteo-mg-timirim"', ""
+    ).replace('href="/imovel/4198561"', f'href="{malformed_link}"')
+
+    for invalid_html in (canonical_html, anchor_html):
+        with pytest.raises(InvalidPublicPropertyUrlException, match="malformed public URL") as error:
+            SearchResultParser().parse_search_response(invalid_html)
+        assert malformed_link in str(error.value)

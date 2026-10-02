@@ -36,6 +36,7 @@ def run_target_search(client: EpifanioRentalClient) -> None:
     print(f"Total matching listings: {len(results)}")
     for item in results:
         print(f"  [{item.identity.property_id}] {item.title[:45]} | {item.price_text} | {item.location.neighborhood}")
+        print(f"  Link: {item.url}")
 
 
 def run_rental_search(client: EpifanioRentalClient) -> None:
@@ -45,6 +46,7 @@ def run_rental_search(client: EpifanioRentalClient) -> None:
     print(f"Total rental listings: {len(results)}")
     for item in results[:5]:
         print(f"  [{item.identity.property_id}] {item.title[:45]} | {item.price_text}")
+        print(f"  Link: {item.url}")
 
 
 def run_detail_retrieval(client: EpifanioRentalClient) -> None:

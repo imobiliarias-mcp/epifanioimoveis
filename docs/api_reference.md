@@ -64,3 +64,7 @@ curl -s "https://www.epifanioimoveis.com/t27/lista_imoveis_fotos.php?imovel=4198
 | `pag` | `int` | `1`, `2`, `3`... | Page index (1-based, 15 items/page). |
 | `ref` | `string` | e.g. `0423` | Property reference code. |
 | `reftipo` | `string` | `exata` | Match precision for reference search. |
+
+## 3. Search Result Property Links
+
+Search result serializers provide an absolute public `url` for each property and retain its original `url_path`. Relative and protocol-relative card links are resolved against the configured public site origin, and identifying query parameters (for example, `?id=608`) are preserved. The CLI and MCP search results expose the same public URL; no additional detail request is issued to create it.
