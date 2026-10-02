@@ -1,12 +1,15 @@
 """Unit tests for EpifanioRentalClient with stubbed HTTP responses."""
 
+import httpx
 import pytest
+
 from epifanio_research.client import EpifanioRentalClient
 from epifanio_research.collaborators import RentalNetworkGateway, RentalParserSuite
-from epifanio_research.domain.criteria import SearchCriteria
+from epifanio_research.infrastructure import http_client as http_client_module
 from epifanio_research.infrastructure.http_client import (
-    HttpClientProtocol,
     HttpResponse,
+    HttpxHttpClient,
+    PortalConnectionError,
     PropertyNotFoundError,
 )
 from epifanio_research.infrastructure.url_builder import UrlBuilder
@@ -64,3 +67,27 @@ def test_client_property_not_found_raises_exception():
 
     with pytest.raises(PropertyNotFoundError):
         client.get_details("999999")
+
+
+def _stub_httpx_response(monkeypatch, status_code: int) -> None:
+    original_client = httpx.Client
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(
+            status_code, text="upstream failure", request=request
+        )
+    )
+
+    def create_client(**options):
+        return original_client(transport=transport, **options)
+
+    monkeypatch.setattr(http_client_module.httpx, "Client", create_client)
+
+
+@pytest.mark.parametrize("status_code", [400, 404, 503])
+def test_http_client_raises_connection_error_for_failed_response(
+    monkeypatch, status_code: int
+) -> None:
+    _stub_httpx_response(monkeypatch, status_code)
+
+    with pytest.raises(PortalConnectionError, match=str(status_code)):
+        HttpxHttpClient().get("https://www.epifanioimoveis.com/search")

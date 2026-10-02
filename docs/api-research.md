@@ -10,6 +10,7 @@ The portal serves server-side rendered HTML (charset `ISO-8859-1` / Latin1) with
 - **Authentication**: **None required**. All listing searches, filter queries, pagination requests, property details, and gallery photos are publicly accessible without authentication, session cookies, API keys, or CSRF tokens.
 - **Request Headers**: Standard desktop `User-Agent` is required to prevent anti-bot generic blocks. No proprietary headers or cookies are needed.
 - **HTTP Methods**: All research operations (search, filter, pagination, detail retrieval, photos) utilize `GET`.
+- **HTTP Status Errors**: The client follows redirects and raises `PortalConnectionError` for all 4xx/5xx responses, including 404, so failed searches are never parsed as empty results. Nonexistent property IDs are documented to redirect to the homepage and become `PropertyNotFoundError`.
 
 ---
 
