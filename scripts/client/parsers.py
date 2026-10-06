@@ -9,6 +9,7 @@ from bs4 import BeautifulSoup
 from scripts.client.search_parser import (
     DEFAULT_PUBLIC_BASE_URL,
     SearchResultParser,  # noqa: F401 - public compatibility re-export
+    _parse_brl_price,
     resolve_public_property_link,
 )
 from scripts.domain.collections import FacetCollection
@@ -109,10 +110,7 @@ class PropertyDetailParser:
             return float(raw)
         node = soup.select_one(".info__valor, .imovelcard__valor__valor")
         text = node.get_text(" ", strip=True) if node else ""
-        clean = re.sub(r"[^\d]", "", text)
-        if clean:
-            return float(clean)
-        return 0.0
+        return _parse_brl_price(text)
 
     def _extract_property_type(self, title: str) -> str:
         """Extract property type word from title."""

@@ -442,3 +442,49 @@ def test_adapter_malformed_card_links_raise_the_local_exception():
         with pytest.raises(InvalidPublicPropertyUrlException, match="malformed public URL") as error:
             SearchResultParser().parse_search_response(invalid_html)
         assert malformed_link in str(error.value)
+
+
+# --- BRL price parsing regression tests ---
+
+SEARCH_HTML_WITH_COMMA_PRICE = SEARCH_HTML_FIXTURE.replace(
+    "<p class=\"imovelcard__valor__valor\"><span>R$</span> 2.930</p>",
+    "<p class=\"imovelcard__valor__valor\"><span>R$</span> 1.150,00</p>",
+)
+
+DETAIL_HTML_NO_JSON_LD = """
+<html>
+<head></head>
+<body>
+  <h1>Apartamento para Locação, Timóteo / MG</h1>
+  <div class="info__col">Ref: 4198561, bairro Timirim</div>
+  <div class="info__valor">R$ 1.150,00</div>
+  <span class="info__tag">2 Dormitórios</span>
+</body>
+</html>
+"""
+
+
+def test_scripts_search_parser_parses_brl_price_with_thousands_separator():
+    """R$ 1.150,00 must parse to 1150.0, not 115000.0."""
+    from scripts.client.parsers import SearchResultParser
+
+    result = SearchResultParser().parse_search_response(SEARCH_HTML_WITH_COMMA_PRICE)
+    listing = result.to_dictionary()["listings"][0]
+    assert listing["rental_price"] == 1150.0
+
+
+def test_scripts_search_parser_parses_brl_price_without_cents():
+    """R$ 2.930 (no comma) must parse to 2930.0."""
+    from scripts.client.parsers import SearchResultParser
+
+    result = SearchResultParser().parse_search_response(SEARCH_HTML_FIXTURE)
+    listing = result.to_dictionary()["listings"][0]
+    assert listing["rental_price"] == 2930.0
+
+
+def test_scripts_detail_parser_parses_brl_price_html_fallback():
+    """Detail HTML fallback (no JSON-LD) with R$ 1.150,00 must parse to 1150.0."""
+    from scripts.client.parsers import PropertyDetailParser
+
+    detail = PropertyDetailParser().parse_detail_response(DETAIL_HTML_NO_JSON_LD)
+    assert detail.to_dictionary()["rental_price"] == 1150.0

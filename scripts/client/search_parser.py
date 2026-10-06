@@ -21,6 +21,18 @@ from scripts.domain.value_objects import ListingPrice, PropertyCode
 DEFAULT_PUBLIC_BASE_URL = "https://www.epifanioimoveis.com"
 
 
+def _parse_brl_price(text: str) -> float:
+    """Convert Brazilian BRL-formatted price string to float.
+
+    Handles thousands separator (.) and decimal comma (,):
+    'R$ 1.150,00' -> 1150.0, 'R$ 2.930' -> 2930.0.
+    Returns 0.0 on empty or unparseable input.
+    """
+    clean = re.sub(r"[R$\s]", "", text)
+    clean = clean.replace(".", "").replace(",", ".")
+    return float(clean) if clean else 0.0
+
+
 class SearchResultParser:
     """Parse ImobiBrasil rental search cards into adapter entities."""
 
@@ -78,8 +90,7 @@ class SearchResultParser:
         """Parse a listing price from the result card."""
         node = card.select_one(".imovelcard__valor__valor")
         text = node.get_text(" ", strip=True) if node else ""
-        digits = re.sub(r"[^\d]", "", text)
-        return float(digits) if digits else 0.0
+        return _parse_brl_price(text)
 
     def _extract_card_location(self, card: Tag) -> str:
         """Read the card's location label."""
