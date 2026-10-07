@@ -26,11 +26,15 @@ def _parse_brl_price(text: str) -> float:
 
     Handles thousands separator (.) and decimal comma (,):
     'R$ 1.150,00' -> 1150.0, 'R$ 2.930' -> 2930.0.
-    Returns 0.0 on empty or unparseable input.
+    Returns 0.0 on empty or unparseable input (e.g. 'Consulte').
     """
     clean = re.sub(r"[R$\s]", "", text)
     clean = clean.replace(".", "").replace(",", ".")
-    return float(clean) if clean else 0.0
+    digits = re.sub(r"[^\d.]", "", clean)
+    try:
+        return float(digits) if digits else 0.0
+    except ValueError:
+        return 0.0
 
 
 class SearchResultParser:

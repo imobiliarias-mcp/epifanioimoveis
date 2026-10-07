@@ -488,3 +488,12 @@ def test_scripts_detail_parser_parses_brl_price_html_fallback():
 
     detail = PropertyDetailParser().parse_detail_response(DETAIL_HTML_NO_JSON_LD)
     assert detail.to_dictionary()["rental_price"] == 1150.0
+
+
+def test_scripts_search_parser_parses_unparseable_price_as_zero():
+    """'Consulte' or text without digits must return 0.0 without raising."""
+    from scripts.client.search_parser import _parse_brl_price
+
+    assert _parse_brl_price("Consulte") == 0.0
+    assert _parse_brl_price("Sob Consulta") == 0.0
+    assert _parse_brl_price("") == 0.0
